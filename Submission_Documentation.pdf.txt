@@ -1,0 +1,191 @@
+# ShowBay Task Management API - Technical Documentation
+
+## 1. Problem Understanding & Assumptions
+
+### Problem Understanding
+The assignment required building a robust REST API service using FastAPI and PostgreSQL that acts as a bridge between a local database and an external API. The system needed to demonstrate complex data flows, strict validation, and comprehensive testing.
+
+### Key Requirements Addressed:
+- Implementation of exactly four API endpoints (POST, GET, PUT, DELETE)
+- State management through PostgreSQL database interactions
+- External API integration (using JSONPlaceholder as example)
+- Strict validation using Pydantic models
+- Proper HTTP status codes
+- Comprehensive documentation and testing
+
+### Assumptions Made:
+- **Database Availability**: PostgreSQL is accessible via connection string in environment variables
+- **External API Reliability**: External APIs may fail, timeout, or return unexpected responses
+- **User Authentication**: For this assessment, authentication is conceptually prepared but not implemented (would use JWT in production)
+- **Data Format Consistency**: External APIs return JSON data in expected formats
+- **Concurrency**: Multiple users may access the API simultaneously requiring proper connection pooling
+- **Rate Limits**: External APIs may have rate limits that need handling
+
+## 2. High-Level Design and Architecture
+
+### Tech Stack
+- **Language**: Python 3.10+
+- **Framework**: FastAPI with Pydantic for validation
+- **Database**: PostgreSQL with SQLModel ORM
+- **Async HTTP**: httpx for external API calls
+- **Testing**: Pydantic with HTTPX for integration tests
+
+### Architecture Pattern
+The application follows a layered architecture:
+- **Presentation Layer**: FastAPI routes and request/response models
+- **Business Logic Layer**: Service functions and business rules
+- **Data Access Layer**: SQLModel database models and queries
+- **External Integration Layer**: External API utilities and error handling
+
+### Design Patterns Used
+- **Dependency Injection**: FastAPI's built-in DI for database sessions
+- **Separation of Concerns**: Models, schemas, API routes, and utilities in separate modules
+- **Async Programming**: Async/await for non-blocking operations
+- **Clean Architecture**: Clear separation between business logic and infrastructure
+
+## 3. Database Schema and External API Integration
+
+### Database Schema
+The system uses a single `tasks` table with the following structure:
+- `id`: Primary key, auto-incrementing integer
+- `title`: Required string (1-255 chars), task title
+- `description`: Optional string (up to 1000 chars), task description
+- `status`: String (default: "pending"), possible values: pending, in_progress, completed
+- `priority`: String (default: "medium"), possible values: low, medium, high
+- `external_id`: Optional integer, ID from external API
+- `user_id`: Optional string (up to 100 chars), identifies the user who created the task
+- `external_api_data`: Optional text field to store JSON data from external APIs
+- `created_at`: Timestamp when the task was created
+- `updated_at`: Timestamp when the task was last updated
+- `completed_at`: Optional timestamp when the task was completed
+
+### External API Integration
+- **Service**: Uses JSONPlaceholder (https://jsonplaceholder.typicode.com) as the external API
+- **Configuration**: Base URL and timeout configurable via environment variables
+- **Implementation**: Async processing to prevent blocking operations
+- **Error Handling**: Graceful degradation when external API is unavailable
+- **Timeout Handling**: Configurable timeout with fallback behavior
+
+## 4. Data Flow Explanation
+
+### API Endpoint Flows
+
+**POST /api/v1/tasks/ - Create Task**
+1. Request validation using Pydantic `TaskCreate` schema
+2. If `external_id` provided, fetch data from external API with error handling
+3. Create task record in PostgreSQL database
+4. Return created task with 201 Created status
+
+**GET /api/v1/tasks/{id} - Get Task**
+1. Validate task ID parameter
+2. Query database for task by ID
+3. Return task or 404 if not found
+4. Return with 200 OK status
+
+**PUT /api/v1/tasks/{id} - Update Task**
+1. Validate input using `TaskUpdate` schema (partial updates supported)
+2. Query for existing task in database
+3. Update specified fields and save to database
+4. Return updated task with 200 OK status
+
+**DELETE /api/v1/tasks/{id} - Delete Task**
+1. Query for existing task in database
+2. Delete record from database
+3. Return 204 No Content status
+
+### Data Validation Flow
+1. **Input Validation**: Pydantic models validate request data
+2. **Business Validation**: Custom validation logic where needed
+3. **Database Validation**: SQLModel enforces constraints at database level
+4. **Response Validation**: Pydantic models validate response data
+
+## 5. Error Handling & Resilience Strategy
+
+### Exception Types Handled
+- **Validation Errors**: 422 Unprocessable Entity for invalid request data
+- **Not Found Errors**: 404 Not Found for missing resources
+- **External API Errors**: 502 Bad Gateway or 408 Request Timeout
+- **Database Errors**: 500 Internal Server Error
+- **General Errors**: 500 Internal Server Error
+
+### Global Exception Handlers
+- **RequestValidationError Handler**: Processes Pydantic validation errors
+- **ExternalAPIException Handler**: Manages external API integration errors
+- **General Exception Handler**: Catches unexpected errors
+
+### Resilience Features
+- **Graceful Degradation**: When external API fails, core functionality remains available
+- **Connection Pooling**: Proper database connection management with pooling
+- **Timeout Handling**: Prevents hanging requests to external services
+- **Comprehensive Logging**: Detailed error logging for debugging
+- **Retry Mechanism**: Prepared for integration with retry logic for external calls
+
+## 6. Testing Strategy (Unit vs Integration)
+
+### Unit Tests
+Located in `showbay/tests/test_models.py`:
+- Model validation and creation tests
+- Individual component testing
+- Field constraint validation
+- Business logic unit tests
+
+### Integration Tests
+Located in `showbay/tests/test_api.py`:
+- Full API endpoint testing with TestClient
+- Database integration tests
+- Request/response validation testing
+- Cross-module functionality tests
+
+### External API Tests
+Located in `showbay/tests/test_external_api.py`:
+- Mocked external API calls
+- Error condition testing
+- Timeout and failure scenarios
+- Integration with main application flow
+
+### Error Handling Tests
+Located in `showbay/tests/test_error_handling.py`:
+- Exception handler testing
+- Error response validation
+- Status code verification
+- Edge case handling
+
+### Test Coverage Strategy
+- **Pytest Framework**: Comprehensive test execution
+- **TestClient**: FastAPI integration testing
+- **Mocking**: Isolation of external dependencies
+- **Fixtures**: Reusable test setup and teardown
+- **Parameterized Tests**: Multiple input scenarios
+
+## 7. Trade-offs, Limitations, and Improvements
+
+### Trade-offs Made
+- **In-Memory Testing**: Used SQLite in-memory for tests instead of PostgreSQL for simplicity
+- **Basic Authentication**: Authentication conceptually prepared but not fully implemented
+- **Simple Caching**: Caching layer not implemented but architecture is prepared
+- **Basic Monitoring**: Advanced monitoring not implemented but logging is comprehensive
+
+### Current Limitations
+- **No Authentication**: JWT or OAuth2 authentication not implemented
+- **No Rate Limiting**: External API rate limiting not implemented
+- **Basic Caching**: No caching mechanism for external API responses
+- **Limited Monitoring**: No advanced metrics or monitoring
+- **No Migration System**: Alembic migrations not configured
+
+### Potential Improvements
+- **Authentication System**: Implement JWT-based authentication
+- **Rate Limiting**: Add rate limiting middleware for external APIs
+- **Caching Layer**: Integrate Redis for caching external API responses
+- **Advanced Monitoring**: Add Prometheus metrics and health checks
+- **Database Migrations**: Configure Alembic for database schema management
+- **Message Queue**: Add Celery for background tasks
+- **Circuit Breaker**: Implement circuit breaker pattern for external API calls
+- **Advanced Logging**: Structured logging with correlation IDs
+
+### Security Enhancements
+- **Input Sanitization**: Enhanced input validation and sanitization
+- **SQL Injection Prevention**: Continued use of ORM for query safety
+- **Rate Limiting**: Per-user and per-endpoint rate limiting
+- **Authentication**: JWT token validation and refresh mechanisms
+
+This comprehensive system demonstrates modern backend engineering practices with FastAPI, proper validation, error handling, and testing strategies while maintaining extensibility for future enhancements.
